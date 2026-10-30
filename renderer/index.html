@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<title>RunBay</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7Z"/></svg></div>
+      <div><b>RunBay</b><small>Local dev launcher</small></div>
+    </div>
+    <div class="side-add">
+      <button class="btn primary" data-action="new-from-folder"><svg class="ic" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Add from folder</button>
+      <button class="btn icon" data-action="new-project" title="Add manually"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+    <div class="search">
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="proj-search" type="text" placeholder="Search apps…">
+    </div>
+    <div id="project-list"></div>
+    <div id="idle-banner"></div>
+    <div class="tools">
+      <button class="btn small ghost" data-action="free-mem" title="Stop idle servers to free memory"><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>Free memory</button>
+      <button class="btn small red" data-action="stop-all" title="Stop every running server"><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop all</button>
+      <button class="btn small ghost" data-action="export-cfg" title="Back up your apps"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/></svg>Export</button>
+      <button class="btn small ghost" data-action="import-cfg" title="Import apps"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="m7 13 5-5 5 5"/><path d="M4 3h16"/></svg>Import</button>
+    </div>
+    <div id="sidebar-foot"></div>
+    <div class="about-link" id="about-link" data-action="about" title="About, version history and license"></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<div id="modal-root"></div>
+<script src="app.js"></script>
+</body>
+</html>

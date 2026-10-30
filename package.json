@@ -1,0 +1,79 @@
+{
+  "name": "runbay",
+  "version": "1.5.0",
+  "description": "Desktop launcher for local dev servers (Next.js, PHP, Python, Docker, ngrok...)",
+  "main": "main.js",
+  "author": {
+    "name": "WebCrab.lk",
+    "url": "https://webcrab.lk"
+  },
+  "homepage": "https://github.com/Tharana/runbay",
+  "license": "MIT",
+  "runbay": {
+    "updateUrl": "https://raw.githubusercontent.com/Tharana/runbay/main/latest.json"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "build": {
+    "appId": "lk.webcrab.runbay",
+    "productName": "RunBay",
+    "copyright": "Copyright (c) 2026 WebCrab.lk",
+    "files": [
+      "main.js",
+      "detect.js",
+      "preload.js",
+      "icon.png",
+      "CHANGELOG.md",
+      "LICENSE.txt",
+      "renderer/**/*"
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signtoolOptions": {
+        "publisherName": "WebCrab.lk"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RunBay",
+      "license": "LICENSE.txt",
+      "artifactName": "RunBay-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "RunBay-${version}-portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tharana/runbay.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tharana/runbay/issues"
+  },
+  "keywords": [
+    "dev-server",
+    "launcher",
+    "ngrok",
+    "electron",
+    "windows",
+    "localhost",
+    "developer-tools"
+  ]
+}
