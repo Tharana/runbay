@@ -1,7 +1,7 @@
 {
   "name": "runbay",
   "version": "1.5.0",
-  "description": "Desktop launcher for local dev servers (Next.js, PHP, Python, Docker, ngrok...)",
+  "description": "Free open-source Windows app to run, monitor and debug all your local dev servers in one window (Next.js, Laravel, NestJS, Django, Docker, ngrok).",
   "main": "main.js",
   "author": {
     "name": "WebCrab.lk",
@@ -69,11 +69,26 @@
   },
   "keywords": [
     "dev-server",
-    "launcher",
-    "ngrok",
-    "electron",
-    "windows",
     "localhost",
-    "developer-tools"
+    "developer-tools",
+    "process-manager",
+    "server-manager",
+    "ngrok",
+    "ngrok-gui",
+    "electron",
+    "electron-app",
+    "windows",
+    "desktop-app",
+    "launcher",
+    "nextjs",
+    "laravel",
+    "nestjs",
+    "django",
+    "docker-compose",
+    "monorepo",
+    "local-development",
+    "log-viewer",
+    "webhook-testing",
+    "productivity"
   ]
 }

@@ -6,8 +6,12 @@
 
 **Run all your local dev servers from one window.**
 
-Start, stop and watch your frontend, backend, database and ngrok tunnel with one click.
-Free and open source for every developer.
+A free, open-source **local dev server manager for Windows**. Start, stop and monitor your frontend,
+backend, database and ngrok tunnel with one click, with live logs, health checks and auto-restart.
+A simple GUI alternative to juggling terminals, `pm2` and `docker compose` commands.
+
+**Works with:** Next.js · React · Vite · NestJS · Node.js · Laravel · PHP · Django · FastAPI · Flask ·
+Go · .NET · Spring Boot · Docker Compose · PostgreSQL · MySQL · Redis · ngrok
 
 [![Download](https://img.shields.io/github/v/release/Tharana/runbay?label=Download&style=for-the-badge&color=7c6cff)](https://github.com/Tharana/runbay/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-3ddc97?style=for-the-badge)](LICENSE.txt)
@@ -20,6 +24,8 @@ Free and open source for every developer.
 </p>
 
 ## Why RunBay?
+
+*Looking for a localhost manager, a way to run multiple dev servers at once, or a desktop GUI for ngrok? That is what RunBay is for.*
 
 Every project needs three terminals, a database, a tunnel and a reminder of which port is which.
 RunBay replaces all of that with one app:
