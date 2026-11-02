@@ -1,6 +1,6 @@
 {
   "name": "runbay",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Free open-source Windows app to run, monitor and debug all your local dev servers in one window (Next.js, Laravel, NestJS, Django, Docker, ngrok).",
   "main": "main.js",
   "author": {
@@ -24,6 +24,13 @@
       "main.js",
       "detect.js",
       "preload.js",
+      "launcher-preload.js",
+      "envtools.js",
+      "dbtools.js",
+      "localdomains.js",
+      "runtimes.js",
+      "aihelper.js",
+      "cli.js",
       "icon.png",
       "CHANGELOG.md",
       "LICENSE.txt",
@@ -58,6 +65,8 @@
     "electron-builder": "^25.0.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "node-forge": "^1.4.2",
     "qrcode": "^1.5.4"
   },
   "repository": {
@@ -89,6 +98,11 @@
     "local-development",
     "log-viewer",
     "webhook-testing",
-    "productivity"
+    "productivity",
+    "cli",
+    "nvm",
+    "local-https",
+    "env-editor",
+    "workspaces"
   ]
 }

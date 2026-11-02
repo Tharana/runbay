@@ -9,6 +9,8 @@ let logTab = 'all';
 let autoscroll = true;
 let appInfo = { version: '', changelog: '', canCheckUpdates: false };
 let deps = {}; // svcId -> { hasPkg, stale, reason, pm, hasBuild }
+let runtimeCatalog = {}; // installed Node / Python / PHP versions, for the editor's drop-down
+let envs = {}; // svcId -> { template, missing: [keys] } for services whose .env lacks keys from .env.example
 const hist = new Map(); // svcId -> [{cpu, mem}] for the sparklines
 const HIST_MAX = 90;
 const DB_PORTS = new Set([3306, 5432, 6379, 27017, 1433]); // not web pages: no "open" link
@@ -17,6 +19,12 @@ let inspPort = 4040;
 let inspSel = null;
 let inspData = [];
 let search = '';
+let workspaces = []; // [{ id, name, projectIds }]
+let levelFilter = 'all'; // all | err | warn | info
+let portsTimer = null;
+let portRows = [];
+let portArm = null; // "port:pid" waiting for a second click to confirm a kill
+let portArmTimer = null;
 const IDLE_MS = 15 * 60 * 1000;
 let filter = '';
 const MAX_DOM = 2500;
@@ -39,6 +47,12 @@ const ICONS = {
   terminal: '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
   logs: '<path d="M4 6h16M4 12h16M4 18h10"/>',
   note: '<path d="M5 4h14v16H5z"/><path d="M8 9h8M8 13h8M8 17h5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+  check: '<path d="m5 12 5 5 9-10"/>',
+  plug: '<path d="M9 2v6M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0Z"/><path d="M12 18v4"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
 };
 const ic = (n) => `<svg class="ic" viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
 const sel = () => projects.find((p) => p.id === selectedId);
@@ -73,7 +87,28 @@ function sidebarList() {
   return list.sort((x, y) => rank(x) - rank(y) || sec(x).localeCompare(sec(y)) || x.name.localeCompare(y.name)).map((p) => ({ p, sec: sec(p) }));
 }
 
+// a workspace is "full" when every service of every app in it is running
+function wsState(w) {
+  const ps = w.projectIds.map((id) => projects.find((p) => p.id === id)).filter(Boolean).map(projState);
+  const full = ps.length > 0 && ps.every((x) => x.total > 0 && x.run === x.total);
+  const any = ps.some((x) => x.run > 0);
+  return { full, any, apps: ps.length, runningApps: ps.filter((x) => x.run > 0).length, state: full ? 'running' : any ? 'installing' : ps.some((x) => x.state === 'crashed') ? 'crashed' : 'stopped' };
+}
+
+function renderWorkspaces() {
+  const rows = workspaces.map((w) => {
+    const s = wsState(w);
+    return `<div class="ws-item" title="${s.apps} app(s)">
+      <span class="dot ${s.state}"></span><span class="nmt">${esc(w.name)}</span><span class="dim">${s.runningApps}/${s.apps}</span>
+      <button class="btn ghost small icon" data-action="ws-toggle" data-id="${w.id}" title="${s.full ? 'Stop' : 'Run'} every app in this workspace" ${s.apps ? '' : 'disabled'}>${ic(s.full ? 'stop' : 'play')}</button>
+      <button class="btn ghost small icon" data-action="ws-edit" data-id="${w.id}" title="Edit workspace">${ic('edit')}</button></div>`;
+  }).join('');
+  $('#ws-wrap').innerHTML = `<div class="grp ws-head"><span>Workspaces</span><button class="btn ghost small icon" data-action="ws-new" title="New workspace">${ic('plus')}</button></div>
+    ${rows || '<div class="dim ws-empty">Group apps into one stack and start it with one click.</div>'}`;
+}
+
 function renderSidebar() {
+  renderWorkspaces();
   const rows = sidebarList();
   const heads = new Set(rows.map((r) => r.sec));
   let last = null;
@@ -139,7 +174,34 @@ function alertsHtml(s, r) {
   const d = deps[s.id];
   if (r.task) h += `<div class="alert">${r.task === 'build' ? 'Building' : 'Installing dependencies'}… (see Logs)</div>`;
   else if (d && d.stale) h += `<div class="alert">${ic('pkg')} ${esc(d.reason)}. <button class="btn amber small" data-action="task" data-kind="install" data-id="${s.id}">Install now</button></div>`;
+  const e = envs[s.id];
+  if (e && e.missing.length) h += `<div class="alert">${ic('file')} ${e.missing.length} variable${e.missing.length > 1 ? 's' : ''} from ${esc(e.template)} ${e.missing.length > 1 ? 'are' : 'is'} not set: <span class="mono">${esc(e.missing.slice(0, 4).join(', '))}${e.missing.length > 4 ? ', ...' : ''}</span> <button class="btn amber small" data-action="env-open" data-id="${s.id}">Open .env editor</button></div>`;
+  for (const m of r.runtimeMissing || []) h += `<div class="alert">${ic('alert')} ${esc(m.text)} is required by ${esc(m.source)} but is not installed, so the system version is used. To fix: <span class="mono">${esc(m.hint)}</span>, then restart.</div>`;
+  if (r.domain && r.domainIssue) {
+    const why = { proxy: 'local HTTPS is switched off', trust: 'the certificate is not trusted yet', hosts: 'the hosts file has no entry for it yet' }[r.domainIssue];
+    h += `<div class="alert">${ic('lock')} <span class="mono">${esc(r.domain)}</span> will not open yet: ${why}. <button class="btn amber small" data-action="domains-open">Set up</button></div>`;
+  }
   return h;
+}
+
+function extraBadges(r, s) {
+  let h = '';
+  if (r.status === 'running') for (const v of r.runtime || []) h += `<span class="badge" title="${esc(v.source)}${v.manager ? ' · ' + esc(v.manager) : ''}">${esc(v.label)}</span>`;
+  if (r.alert) h += `<span class="badge installing" title="A resource alert was raised - see the logs">${{ cpu: 'High CPU', mem: 'High memory', silent: 'No output' }[r.alert]}</span>`;
+  if (r.crashes24 >= 3) h += `<span class="badge crashed" data-action="history-open" style="cursor:pointer" title="Crashed ${r.crashes24} times in the last 24 hours. Click for the timeline.">Flaky · ${r.crashes24} crashes</span>`;
+  return h;
+}
+
+function domainLink(r) {
+  return r.domainUrl && r.status === 'running' ? `<span class="link ng" data-action="url" data-url="${esc(r.domainUrl)}" title="${esc(r.domainUrl)}">${ic('lock')} ${esc(r.domain)} ${ic('ext')}</span>` : '';
+}
+
+// the address a developer most likely wants: first web port, else the first tunnel
+function primaryUrl(r) {
+  if (r.status !== 'running') return '';
+  if (r.domainUrl) return r.domainUrl;
+  const port = r.ports.find((x) => !DB_PORTS.has(x));
+  return port ? `http://localhost:${port}` : r.urls[0] || '';
 }
 
 function cardHtml(s, idx) {
@@ -150,7 +212,7 @@ function cardHtml(s, idx) {
   const urls = r.urls.map((u) => `<span class="link ng" data-action="url" data-url="${esc(u)}" title="${esc(u)}">${esc(u.replace('https://', ''))} ${ic('ext')}</span>`).join('');
   const cfg = !running && s.port ? `<span class="dim">Port ${esc(s.port)}</span>` : '';
   return `<div class="card ${r.status}" data-svc="${s.id}">
-    <div class="card-h"><span class="dot ${r.status}"></span><b>${esc(s.name)}</b><span class="badge ${r.status}">${label[r.status]}</span>${healthBadge(r, running)}${r.errors ? `<span class="badge down" title="Error lines in the logs">${ic('alert')} ${r.errors} error${r.errors > 1 ? 's' : ''}</span>` : ''}</div>
+    <div class="card-h"><span class="dot ${r.status}"></span><b>${esc(s.name)}</b><span class="badge ${r.status}">${label[r.status]}</span>${healthBadge(r, running)}${extraBadges(r, s)}${r.errors ? `<span class="badge down" title="Error lines in the logs">${ic('alert')} ${r.errors} error${r.errors > 1 ? 's' : ''}</span>` : ''}</div>
     ${alertsHtml(s, r)}
     <div class="cmd mono" title="${esc(s.command)}">${esc(s.command || '(no command)')}</div>
     <div class="path mono" data-action="path" data-path="${esc(s.cwd)}" title="Open folder">${esc(s.cwd || '(no folder)')}</div>
@@ -161,7 +223,7 @@ function cardHtml(s, idx) {
       <div class="metric"><span>PID</span><b>${running ? r.pid : '-'}</b></div>
     </div>
     ${sparkHtml(s.id, running)}
-    <div class="links">${ports}${urls}${cfg}${running && !ports && !urls ? '<span class="dim">no listening port yet</span>' : ''}</div>
+    <div class="links">${domainLink(r)}${ports}${urls}${cfg}${running && !ports && !urls ? '<span class="dim">no listening port yet</span>' : ''}</div>
     <div class="card-btns">
       ${busy ? `<button class="btn small" disabled>Installing…</button>` : running
         ? `<button class="btn red small" data-action="svc-stop" data-id="${s.id}">${ic('stop')}Stop</button>`
@@ -169,8 +231,13 @@ function cardHtml(s, idx) {
       <button class="btn amber small" data-action="svc-restart" data-id="${s.id}">${ic('restart')}Restart</button>
       <span class="spacer"></span>
       ${taskBtns(s, r)}
-      <button class="btn ghost small" data-action="vscode" data-path="${esc(s.cwd)}" title="Open in VS Code">${ic('code')}</button>
-      <button class="btn ghost small" data-action="terminal" data-path="${esc(s.cwd)}" title="Open terminal here">${ic('terminal')}</button>
+      ${primaryUrl(r) ? `<button class="btn ghost small" data-action="url" data-url="${esc(primaryUrl(r))}" title="Open ${esc(primaryUrl(r))} in the browser">${ic('globe')}</button>
+      <button class="btn ghost small" data-action="copy-svc-url" data-url="${esc(primaryUrl(r))}" title="Copy ${esc(primaryUrl(r))}">${ic('copy')}</button>` : ''}
+      <button class="btn ghost small" data-action="path" data-path="${esc(s.cwd)}" title="Open folder in File Explorer" ${s.cwd ? '' : 'disabled'}>${ic('folder')}</button>
+      <button class="btn ghost small" data-action="vscode" data-path="${esc(s.cwd)}" title="Open in editor" ${s.cwd ? '' : 'disabled'}>${ic('code')}</button>
+      <button class="btn ghost small" data-action="terminal" data-path="${esc(s.cwd)}" title="Open terminal here" ${s.cwd ? '' : 'disabled'}>${ic('terminal')}</button>
+      ${r.dbKind ? `<button class="btn ghost small" data-action="db-open" data-id="${s.id}" title="Database tools: connection string, backup, tables">${ic('db')}</button>` : ''}
+      <button class="btn ghost small" data-action="env-open" data-id="${s.id}" title="Edit .env files" ${s.cwd ? '' : 'disabled'}>${ic('file')}</button>
       <button class="btn ghost small" data-action="log-tab" data-tab="${s.id}" title="Show logs">${ic('logs')}</button>
     </div></div>`;
 }
@@ -181,7 +248,7 @@ function urlBarHtml(p) {
   for (const s of p.services) {
     const r = st(s.id);
     if (r.status !== 'running') continue;
-    const urls = [...r.ports.filter((x) => !DB_PORTS.has(x)).map((x) => `http://localhost:${x}`), ...r.urls];
+    const urls = [...(r.domainUrl ? [r.domainUrl] : []), ...r.ports.filter((x) => !DB_PORTS.has(x)).map((x) => `http://localhost:${x}`), ...r.urls];
     for (const u of urls) {
       rows.push(`<div class="urlrow"><span class="dim">${esc(s.name)}</span>
         <span class="link ${u.includes('ngrok') ? 'ng' : ''}" data-action="url" data-url="${esc(u)}">${esc(u.replace(/^https?:\/\//, ''))} ${ic('ext')}</span>
@@ -222,6 +289,7 @@ function renderMain() {
         <button class="btn green" data-action="proj-start" ${ps.run === ps.total ? 'disabled' : ''}>${ic('play')}Run all</button>
         <button class="btn red" data-action="proj-stop" ${ps.run === 0 ? 'disabled' : ''}>${ic('stop')}Stop all</button>
         <button class="btn amber" data-action="proj-restart">${ic('restart')}Restart</button>
+        <button class="btn" data-action="history-open" title="Crashes, restarts and downtime">${ic('clock')}History</button>
         <span class="sep"></span>
         <button class="btn icon" data-action="edit-project" title="Edit">${ic('edit')}</button>
         <button class="btn icon" data-action="delete-project" title="Delete">${ic('trash')}</button>
@@ -284,6 +352,8 @@ async function loadDeps() {
   const d = await api.depsStatus(id);
   if (selectedId !== id) return;
   deps = d;
+  try { envs = await api.envStatus(id); } catch { envs = {}; }
+  if (selectedId !== id) return;
   if ($('#cards')) refreshLive();
 }
 
@@ -464,6 +534,9 @@ function renderLogBar() {
     <span class="tab ${isErr ? 'active' : ''}" data-action="log-tab" data-tab="errors">${ic('alert')}Errors <span class="ebadge" id="err-total">${errTotal || ''}</span></span>
     ${p.services.map((s) => `<span class="tab ${logTab === s.id ? 'active' : ''}" data-action="log-tab" data-tab="${s.id}"><span class="dot ${st(s.id).status}"></span> ${esc(s.name)} <span class="ebadge" data-errs="${s.id}">${st(s.id).errors || ''}</span></span>`).join('')}
     <span class="spacer"></span>
+    <select id="log-level" title="Show only one kind of line" ${isErr ? 'disabled' : ''}>
+      ${[['all', 'All levels'], ['err', 'Errors'], ['warn', 'Warnings'], ['info', 'Info']].map(([v, n]) => `<option value="${v}" ${levelFilter === v ? 'selected' : ''}>${n}</option>`).join('')}
+    </select>
     <input type="text" id="log-filter" placeholder="Filter logs…" value="${esc(filter)}">
     <label class="dim"><input type="checkbox" id="autoscroll" ${autoscroll ? 'checked' : ''}> Auto-scroll</label>
     <button class="btn small" data-action="log-copy" title="Copies the selected text, or everything shown">${isErr ? 'Copy errors' : 'Copy'}</button>
@@ -471,16 +544,57 @@ function renderLogBar() {
     ${isErr ? '' : '<button class="btn small" data-action="log-clear">Clear</button>'}`;
 }
 
-function lineClass(l) {
-  if (l.text.startsWith('[runbay]')) return l.err ? 'err' : 'sys';
-  if (/\b\w*(?:error|exception)\b|\b(?:failed|fatal|EADDRINUSE)\b/i.test(l.text)) return 'err';
-  if (/\bwarn(ing)?\b/i.test(l.text)) return 'warn';
-  return '';
+const ERR_RE = /\b\w*(?:error|exception)\b|\b(?:failed|fatal|EADDRINUSE)\b/i;
+const WARN_RE = /\bwarn(ing)?\b/i;
+// lines of a stack trace (JS, Python, Java, PHP, Go); keep in sync with main.js
+const STACK_RE = /^\s+at\s+\S|^\s*File ".+", line \d+|^Traceback \(most recent call last\)|^\s*Caused by:|^\s+\.\.\. \d+ more|^\s*#\d+\s+\S.*\(\d+\)|^\s+\S+\.go:\d+/;
+// a file path, optionally followed by :line:col, ", line N" (Python) or (N) (PHP)
+const PATH_RE = /(?:(?<![\w:/\\@.~-])|(?<=file:\/\/\/))((?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|[\w@.-]+[\\/])[^\s:()'"<>|*?]*?\.[A-Za-z]\w{0,7})(?![\w/\\]|\.\w)(?::(\d+))?(?::(\d+))?(?:["']?,\s*line\s+(\d+)|\((\d+)\))?/g;
+
+// cls = how the line looks, level = which filter it belongs to
+function lineInfo(l) {
+  if (l._i) return l._i;
+  const t = l.text;
+  let i;
+  if (t.startsWith('[runbay]')) i = l.err ? { cls: 'err', level: 'err' } : { cls: 'sys', level: 'info' };
+  else if (STACK_RE.test(t)) i = { cls: 'stack', level: 'err' };
+  else if (ERR_RE.test(t)) i = { cls: 'err', level: 'err' };
+  else if (WARN_RE.test(t)) i = { cls: 'warn', level: 'warn' };
+  else i = { cls: '', level: 'info' };
+  l._i = i;
+  return i;
+}
+
+// the line, with file paths turned into links that open the editor
+function linkify(el, text, svcId) {
+  let last = 0;
+  for (const m of text.matchAll(PATH_RE)) {
+    if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const a = document.createElement('span');
+    a.className = 'fl';
+    a.dataset.action = 'open-file';
+    a.dataset.svc = svcId;
+    a.dataset.file = m[1];
+    a.dataset.line = m[2] || m[4] || m[5] || '';
+    a.dataset.col = m[2] ? m[3] || '' : '';
+    a.title = 'Open in editor';
+    a.textContent = m[0];
+    el.appendChild(a);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
 }
 
 function lineEl(svc, l, idx, showTag) {
   const d = document.createElement('div');
-  d.className = 'ln ' + lineClass(l);
+  d.className = 'ln ' + lineInfo(l).cls;
+  if (logTab === 'errors' && lineInfo(l).cls === 'err') {
+    d.classList.add('askable');
+    d.dataset.action = 'ai-explain';
+    d.dataset.svc = svc.id;
+    d.dataset.seq = l.seq;
+    d.title = 'Click to have Claude explain this error';
+  }
   d.dataset.seq = l.seq;
   if (showTag) {
     const t = document.createElement('span');
@@ -489,8 +603,16 @@ function lineEl(svc, l, idx, showTag) {
     t.textContent = svc.name;
     d.appendChild(t);
   }
-  d.appendChild(document.createTextNode(l.text));
+  linkify(d, l.text, svc.id);
   return d;
+}
+
+// does a line pass the active tab, level and text filters?
+function passes(l) {
+  const lv = lineInfo(l).level;
+  if (logTab === 'errors' && lv !== 'err') return false;
+  if (levelFilter !== 'all' && lv !== levelFilter) return false;
+  return !filter || l.text.toLowerCase().includes(filter.toLowerCase());
 }
 
 function renderLogBody() {
@@ -502,9 +624,7 @@ function renderLogBody() {
     if (logTab === 'all' || logTab === 'errors' || logTab === s.id) (logs.get(s.id) || []).forEach((l) => list.push({ s, i, l }));
   });
   list.sort((a, b) => a.l.seq - b.l.seq);
-  const f = filter.toLowerCase();
-  const vis = logTab === 'errors' ? list.filter((x) => lineClass(x.l) === 'err') : list;
-  const shown = (f ? vis.filter((x) => x.l.text.toLowerCase().includes(f)) : vis).slice(-MAX_DOM);
+  const shown = list.filter((x) => passes(x.l)).slice(-MAX_DOM);
   body.textContent = '';
   if (!shown.length) {
     body.innerHTML = '<div class="log-empty">No logs yet. Press Run to start.</div>';
@@ -526,8 +646,7 @@ function appendLog(svcId, line) {
   if (!p || !body) return;
   const i = p.services.findIndex((s) => s.id === svcId);
   if (i < 0 || (logTab !== 'all' && logTab !== 'errors' && logTab !== svcId)) return;
-  if (filter && !line.text.toLowerCase().includes(filter.toLowerCase())) return;
-  if (logTab === 'errors' && lineClass(line) !== 'err') return;
+  if (!passes(line)) return;
   if (body.querySelector('.log-empty')) body.textContent = '';
   body.appendChild(lineEl(p.services[i], line, i, logTab === 'all' || logTab === 'errors'));
   while (body.childElementCount > MAX_DOM) body.removeChild(body.firstChild);
@@ -556,8 +675,16 @@ const PRESETS = {
   prisma: { name: 'Prisma Studio', command: 'npx prisma studio --port 5555', port: '5555' },
 };
 
+function runtimeOptions(cur) {
+  const o = [['auto', 'Automatic - follow .nvmrc, .node-version, .python-version ...'], ['off', "Don't change - use the versions installed system-wide"]];
+  for (const [lang, name] of [['node', 'Node'], ['python', 'Python'], ['php', 'PHP']]) for (const v of runtimeCatalog[lang] || []) o.push([`${lang}:${v.version}`, `Always ${name} ${v.version} (${v.manager})`]);
+  if (!o.some((x) => x[0] === cur)) o.push([cur, `${cur.replace(':', ' ')} (not installed)`]);
+  return o.map(([v, n]) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(n)}</option>`).join('');
+}
+
 function svcEditHtml(s) {
-  return `<div class="svc-edit" data-sid="${esc(s.id || '')}">
+  const sid = s.id || crypto.randomUUID();
+  return `<div class="svc-edit" data-sid="${esc(sid)}" data-deps="${esc(JSON.stringify(s.dependsOn || []))}">
     <div class="top">
       <label class="f">Name<input type="text" class="s-name" value="${esc(s.name)}"></label>
       <label class="f" style="max-width:110px">Port<input type="text" class="s-port" value="${esc(s.port)}" placeholder="3000"></label>
@@ -568,6 +695,10 @@ function svcEditHtml(s) {
       <label class="f inline">Max retries<input type="number" min="1" class="s-retries" value="${esc(s.maxRetries || 3)}"></label>
       <label class="f inline">Wait after ready (s)<input type="number" min="0" class="s-delay" value="${esc(s.delay || 0)}"></label>
     </div>
+    <div class="deps-box chips"></div>
+    <label class="f">Language versions<select class="s-runtime" style="width:100%">${runtimeOptions(s.runtime || 'auto')}</select></label>
+    <div class="rt-note"></div>
+    <label class="f">Local domain (optional)<input type="text" class="s-domain mono" value="${esc(s.domain || '')}" placeholder="myshop.test"></label>
     <label class="f">Command<input type="text" class="s-cmd mono" value="${esc(s.command)}" placeholder="npm run dev"></label>
     <label class="f">Stop command (optional, e.g. docker stop name)<input type="text" class="s-stop mono" value="${esc(s.stopCommand)}"></label>
     <label class="f">Folder path
@@ -600,7 +731,6 @@ function openProjectModal(p, prefill) {
       </div>
       <label class="f">Group / tag (optional)<input type="text" id="m-group" value="${esc(p.group)}" placeholder="Clients, Personal, Work…"></label>
       <label class="chk"><input type="checkbox" id="m-auto" ${p.autoStart ? 'checked' : ''}> Start this app automatically when RunBay opens</label>
-      <div class="dim">Services start top to bottom; each waits until the previous one is listening, plus its own extra delay.</div>
       <label class="f">Notes<textarea id="m-notes" rows="2" placeholder="Anything to remember…">${esc(p.notes)}</textarea></label>
       <div class="presets"><b>Env profiles</b><span class="dim">applied on top of each service's variables</span><span class="spacer"></span>
         <button class="btn small" data-action="add-prof">+ Profile</button></div>
@@ -617,11 +747,15 @@ function openProjectModal(p, prefill) {
         </select>
       </div>
       <div id="m-services" style="display:flex;flex-direction:column;gap:10px">${p.services.map(svcEditHtml).join('')}</div>
+      <div class="presets"><b>Start order</b><span class="dim">who waits for whom</span></div>
+      <div id="dep-graph" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
     <div class="foot">
+      <span id="m-err" style="color:var(--red);flex:1;text-align:left"></span>
       <button class="btn" data-action="modal-close">Cancel</button>
       <button class="btn primary" data-action="modal-save" data-id="${p.id || ''}">Save</button>
     </div></div></div>`;
+  refreshDeps();
   $('#m-name').focus();
 }
 
@@ -634,8 +768,134 @@ function confirmModal(msg, okLabel, onOk) {
 }
 const closeModal = () => {
   clearInterval(inspTimer);
+  clearInterval(portsTimer);
   $('#modal-root').innerHTML = '';
 };
+
+// ---------- workspaces ----------
+function openWorkspaceModal(w) {
+  const isNew = !w;
+  w = w || { name: '', projectIds: [] };
+  const rows = projects.map((p) => `<label class="memrow"><input type="checkbox" class="ws-pick" data-id="${p.id}" ${w.projectIds.includes(p.id) ? 'checked' : ''}>
+    <span><b>${esc(p.name)}</b></span><span class="dim">${p.services.length} service(s)${p.group ? ' · ' + esc(p.group) : ''}</span></label>`).join('');
+  $('#modal-root').innerHTML = `<div class="overlay"><div class="modal small">
+    <h2>${isNew ? 'New workspace' : 'Edit workspace'}</h2>
+    <div class="body">
+      <div class="dim">A workspace starts or stops several apps together, for example everything for one client.</div>
+      <label class="f">Name<input type="text" id="ws-name" value="${esc(w.name)}" placeholder="Client X stack"></label>
+      <div class="dim">Apps in this workspace:</div>
+      ${rows || '<div class="dim">Add an app first.</div>'}
+    </div>
+    <div class="foot">${isNew ? '' : `<button class="btn red" data-action="ws-delete" data-id="${w.id}">Delete</button>`}<span class="spacer"></span>
+      <button class="btn" data-action="modal-close">Cancel</button>
+      <button class="btn primary" data-action="ws-save" data-id="${w.id || ''}">Save</button></div></div></div>`;
+  $('#ws-name').focus();
+}
+
+// ---------- settings ----------
+let settingsDraft = null;
+
+// turn a key press into an Electron accelerator such as Ctrl+Alt+R
+function accelFromEvent(e) {
+  const mods = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
+  let key = '';
+  if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
+  else if (/^Digit\d$/.test(e.code)) key = e.code.slice(5);
+  else if (/^F\d{1,2}$/.test(e.code)) key = e.code;
+  else key = { Space: 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Return', Tab: 'Tab', Backquote: '`', Minus: '-', Equal: '=' }[e.code] || '';
+  return key && mods.length ? [...mods, key].join('+') : '';
+}
+
+async function openSettings() {
+  const { settings: s, hotkeyError, packaged } = await api.getSettings();
+  settingsDraft = s;
+  setTimeout(() => { if (typeof settingsExtras === 'function') settingsExtras(); }, 0);
+  $('#modal-root').innerHTML = `<div class="overlay"><div class="modal small">
+    <h2>Settings</h2>
+    <div class="body">
+      <label class="f">Quick launcher shortcut
+        <div class="pathrow"><input type="text" id="set-hotkey" class="mono" readonly value="${esc(s.hotkey)}" placeholder="Click here, then press the keys">
+        <button class="btn small" data-action="set-hotkey-clear">Clear</button></div></label>
+      <div class="dim">Press it anywhere in Windows to search your apps and start or stop them. Needs Ctrl, Alt, Shift or Win plus a key.</div>
+      ${hotkeyError ? `<div class="alert">${esc(hotkeyError)}</div>` : ''}
+      <label class="chk"><input type="checkbox" id="set-login" ${s.startWithWindows ? 'checked' : ''}> Start RunBay when Windows starts</label>
+      <label class="chk" style="margin-left:22px"><input type="checkbox" id="set-min" ${s.startMinimized ? 'checked' : ''}> ...and keep it minimized in the tray</label>
+      <div class="dim">${packaged ? 'Apps with "Start automatically" turned on will then be running as soon as you sign in.' : 'Start with Windows only works in the installed app.'}</div>
+      <label class="f">Code editor command
+        <input type="text" id="set-editor" class="mono" value="${esc(s.editor)}" placeholder="code"></label>
+      <div class="dim">Used by the editor button and by clickable file paths in the logs. Examples: <span class="mono">code</span>, <span class="mono">cursor</span>, <span class="mono">windsurf</span>, or a full path to an .exe.</div>
+      <label class="chk"><input type="checkbox" id="set-hist" ${s.logHistory ? 'checked' : ''}> Keep log history between sessions</label>
+      <div class="dim">Saves the latest lines of every service to disk and shows them again after a restart.
+        <span class="link" data-action="clear-history">Clear saved history</span></div>
+      <label class="chk"><input type="checkbox" id="set-alerts" ${s.alerts ? 'checked' : ''}> Resource alerts</label>
+      <div class="row">
+        <label class="f">CPU above (%)<input type="number" id="set-cpu" min="0" max="100" value="${esc(s.cpuLimit)}"></label>
+        <label class="f">Memory above (MB)<input type="number" id="set-mem" min="0" value="${esc(s.memLimitMB)}"></label>
+        <label class="f">No output for (min)<input type="number" id="set-silent" min="0" value="${esc(s.silentMin)}"></label>
+      </div>
+      <div class="dim">Notifies you once when a service stays above these limits (CPU for 30 seconds), or says nothing for too long. 0 turns a limit off. "No output" suits servers that normally log a lot.</div>
+      <b>Explain this error (Claude)</b>
+      <div id="ai-box" class="dim">Loading…</div>
+      <b>Command line</b>
+      <div id="cli-box" class="dim">Loading…</div>
+      <div class="dim" id="set-msg"></div>
+    </div>
+    <div class="foot"><button class="btn" data-action="modal-close">Cancel</button><button class="btn primary" data-action="settings-save">Save</button></div></div></div>`;
+}
+
+// ---------- port map ----------
+function portRowsHtml() {
+  const q = ($('#port-q') ? $('#port-q').value : '').trim().toLowerCase();
+  const mode = $('#port-mode') ? $('#port-mode').value : 'all';
+  const rows = portRows.filter((r) => {
+    if (mode === 'runbay' && !r.svcId) return false;
+    if (mode === 'conflict' && !r.needs.length) return false;
+    return !q || [r.port, r.pid, r.name, r.cmd, r.svcLabel, r.needs.join(' ')].join(' ').toLowerCase().includes(q);
+  });
+  if (!rows.length) return '<tr><td colspan="5" class="dim pad">Nothing matches.</td></tr>';
+  return rows.map((r) => {
+    const key = `${r.port}:${r.pid}`;
+    const armed = portArm === key;
+    const owner = r.svcId ? `<span class="badge running">RunBay</span> ${esc(r.svcLabel)}`
+      : r.needs.length ? `<span class="badge installing">Conflict</span> <span class="dim">blocks ${esc(r.needs.join(', '))}</span>` : '<span class="dim">-</span>';
+    const btn = r.protected ? '<span class="dim">system</span>'
+      : `<button class="btn small ${armed ? 'red' : 'ghost'}" data-action="port-kill" data-port="${r.port}" data-pid="${r.pid}">${armed ? 'Click again to confirm' : r.svcId ? 'Stop service' : 'Kill'}</button>`;
+    return `<tr class="${r.needs.length ? 'warnrow' : ''}">
+      <td class="mono"><b>${r.port}</b></td>
+      <td class="dim" title="${esc(r.addresses.join(', '))}">${r.localOnly ? 'localhost only' : 'all interfaces'}</td>
+      <td><span title="${esc(r.cmd)}">${esc(r.name)}</span> <span class="dim">PID ${r.pid}</span></td>
+      <td>${owner}</td><td class="ar">${btn}</td></tr>`;
+  }).join('');
+}
+
+async function refreshPorts() {
+  if (!$('#ports-body')) { clearInterval(portsTimer); return; }
+  portRows = await api.listPorts();
+  const body = $('#ports-body');
+  if (!body) return;
+  body.innerHTML = portRowsHtml();
+  const c = portRows.filter((r) => r.needs.length).length;
+  $('#ports-sub').textContent = `${portRows.length} listening port(s)${c ? ` · ${c} blocking one of your apps` : ''}`;
+}
+
+function openPorts() {
+  portRows = [];
+  portArm = null;
+  $('#modal-root').innerHTML = `<div class="overlay"><div class="modal wide">
+    <h2>Port map <span class="dim" id="ports-sub">scanning…</span></h2>
+    <div class="body">
+      <div class="row" style="align-items:center">
+        <input type="text" id="port-q" placeholder="Filter by port, process or app…">
+        <select id="port-mode"><option value="all">All ports</option><option value="runbay">Started by RunBay</option><option value="conflict">Blocking my apps</option></select>
+      </div>
+      <div class="ptab-wrap"><table class="ptab"><thead><tr><th>Port</th><th>Reachable from</th><th>Process</th><th>RunBay</th><th></th></tr></thead>
+      <tbody id="ports-body"><tr><td colspan="5" class="dim pad">Scanning…</td></tr></tbody></table></div>
+      <div class="dim">Shows every program listening on this PC, including ones RunBay did not start. Killing a process stops it immediately.</div>
+    </div>
+    <div class="foot"><button class="btn" data-action="ports-refresh">Refresh</button><span class="spacer"></span><button class="btn primary" data-action="modal-close">Close</button></div></div></div>`;
+  refreshPorts();
+  portsTimer = setInterval(refreshPorts, 4000);
+}
 
 async function saveModal(id) {
   const name = $('#m-name').value.trim();
@@ -652,7 +912,19 @@ async function saveModal(id) {
     autoRestart: $('.s-restart', el).checked,
     maxRetries: Number($('.s-retries', el).value) || 3,
     delay: Number($('.s-delay', el).value) || 0,
+    domain: $('.s-domain', el).value.trim().toLowerCase(),
+    runtime: $('.s-runtime', el).value || 'auto',
+    dependsOn: JSON.parse(el.dataset.deps || '[]'),
   }));
+  const bad = services.find((s) => s.domain && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.(test|localhost|internal)$/.test(s.domain));
+  const taken = services.find((s, i) => s.domain && services.findIndex((x) => x.domain === s.domain) !== i)
+    || services.find((s) => s.domain && projects.some((q) => q.id !== id && q.services.some((x) => x.domain === s.domain)));
+  const err = $('#m-err');
+  if (bad || taken) {
+    err.textContent = bad ? `"${bad.domain}" is not allowed. Use a name ending in .test, .localhost or .internal, for example myshop.test.` : `The domain ${taken.domain} is already used by another service.`;
+    return;
+  }
+  err.textContent = '';
   // services removed while running should be stopped
   if (old) for (const s of old.services) if (!services.some((x) => x.id === s.id)) await api.stopService(s.id);
   const profiles = [...document.querySelectorAll('.prof-edit')]
@@ -694,6 +966,7 @@ document.addEventListener('click', async (e) => {
       $('#m-desc').value = d.description;
       $('#m-notes').value = $('#m-notes').value || `Folder: ${dir}`;
       $('#m-services').innerHTML = d.services.map(svcEditHtml).join('');
+      refreshDeps();
       $('#detect-msg').textContent = `Found ${d.services.length} server(s) - review and press Save.`;
       return;
     }
@@ -701,6 +974,7 @@ document.addEventListener('click', async (e) => {
     case 'delete-project':
       return confirmModal(`Delete "${p.name}"? Its running servers will be stopped. (Your project files are not touched.)`, 'Delete', async () => {
         projects = await api.deleteProject(p.id);
+        workspaces = await api.getWorkspaces();
         selectedId = projects[0]?.id || null;
         renderSidebar(); renderMain();
       });
@@ -740,6 +1014,89 @@ document.addEventListener('click', async (e) => {
       return;
     }
     case 'path': return t.dataset.path && api.openPath(t.dataset.path);
+    case 'copy-svc-url': {
+      await navigator.clipboard.writeText(t.dataset.url);
+      const old = t.innerHTML;
+      t.innerHTML = ic('check');
+      setTimeout(() => { if (t.isConnected) t.innerHTML = old; }, 1200);
+      return;
+    }
+    case 'open-file': {
+      if (window.getSelection().toString()) return; // the user is selecting text, not clicking a link
+      const r = await api.openFile(t.dataset.svc, t.dataset.file, t.dataset.line, t.dataset.col);
+      if (r && r.error) {
+        t.classList.add('missing');
+        t.title = r.error;
+      }
+      return;
+    }
+    case 'ws-new': return openWorkspaceModal(null);
+    case 'ws-edit': return openWorkspaceModal(workspaces.find((x) => x.id === t.dataset.id));
+    case 'ws-toggle': {
+      const w = workspaces.find((x) => x.id === t.dataset.id);
+      return w && (wsState(w).full ? api.stopWorkspace(w.id) : api.startWorkspace(w.id));
+    }
+    case 'ws-save': {
+      const name = $('#ws-name').value.trim();
+      if (!name) { $('#ws-name').focus(); return; }
+      workspaces = await api.saveWorkspace({
+        id: t.dataset.id || undefined, name,
+        projectIds: [...document.querySelectorAll('.ws-pick:checked')].map((x) => x.dataset.id),
+      });
+      closeModal();
+      return renderSidebar();
+    }
+    case 'ws-delete':
+      return confirmModal('Delete this workspace? Your apps are not touched.', 'Delete', async () => {
+        workspaces = await api.deleteWorkspace(t.dataset.id);
+        renderSidebar();
+      });
+    case 'settings': return openSettings();
+    case 'set-hotkey-clear': $('#set-hotkey').value = ''; return;
+    case 'clear-history': {
+      const n = await api.clearLogHistory();
+      $('#set-msg').textContent = n ? `Removed saved history of ${n} service(s).` : 'No saved history found.';
+      return;
+    }
+    case 'settings-save': {
+      const res = await api.saveSettings({
+        hotkey: $('#set-hotkey').value.trim(),
+        startWithWindows: $('#set-login').checked,
+        startMinimized: $('#set-min').checked,
+        editor: $('#set-editor').value.trim(),
+        logHistory: $('#set-hist').checked,
+        alerts: $('#set-alerts').checked,
+        cpuLimit: $('#set-cpu').value,
+        memLimitMB: $('#set-mem').value,
+        silentMin: $('#set-silent').value,
+        aiModel: $('#set-ai-model') ? $('#set-ai-model').value : undefined,
+      });
+      if (res.error || res.warning) {
+        $('#set-msg').textContent = [res.error && `Shortcut not changed: ${res.error}`, res.warning, 'Other settings were saved.'].filter(Boolean).join(' ');
+        $('#set-hotkey').value = res.settings.hotkey;
+        return;
+      }
+      return closeModal();
+    }
+    case 'ports': return openPorts();
+    case 'ports-refresh': return refreshPorts();
+    case 'port-kill': {
+      const key = `${t.dataset.port}:${t.dataset.pid}`;
+      if (portArm !== key) {
+        // first click arms the button, a second click within a few seconds does it
+        portArm = key;
+        clearTimeout(portArmTimer);
+        portArmTimer = setTimeout(() => { portArm = null; if ($('#ports-body')) $('#ports-body').innerHTML = portRowsHtml(); }, 4000);
+        $('#ports-body').innerHTML = portRowsHtml();
+        return;
+      }
+      portArm = null;
+      clearTimeout(portArmTimer);
+      const res = await api.killPort(t.dataset.port, t.dataset.pid);
+      if (res && res.error) $('#ports-sub').textContent = res.error;
+      else await refreshPorts();
+      return;
+    }
     case 'log-tab': logTab = t.dataset.tab; renderLogBar(); return renderLogBody();
     case 'log-clear': {
       const ids = logTab === 'all' ? p.services.map((s) => s.id) : [logTab];
@@ -828,12 +1185,13 @@ document.addEventListener('click', async (e) => {
     case 'add-svc': {
       const pr = PRESETS[t.dataset.preset];
       $('#m-services').insertAdjacentHTML('beforeend', svcEditHtml({ ...pr, cwd: '', env: '' }));
+      refreshDeps();
       return;
     }
-    case 'rm-svc': return t.closest('.svc-edit').remove();
+    case 'rm-svc': t.closest('.svc-edit').remove(); return refreshDeps();
     case 'browse': {
       const dir = await api.pickFolder();
-      if (dir) $('.s-cwd', t.closest('.svc-edit')).value = dir;
+      if (dir) { $('.s-cwd', t.closest('.svc-edit')).value = dir; refreshRuntimeNotes(); }
       return;
     }
   }
@@ -843,12 +1201,28 @@ document.addEventListener('input', (e) => {
   if (e.target.id === 'log-filter') { filter = e.target.value; renderLogBody(); }
   if (e.target.id === 'wh-path') whUpdate();
   if (e.target.id === 'proj-search') { search = e.target.value; renderSidebar(); }
+  if (e.target.id === 'port-q' && $('#ports-body')) $('#ports-body').innerHTML = portRowsHtml();
 });
+// record the shortcut by pressing it instead of typing it
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'set-hotkey') return;
+  if (e.key === 'Tab') return;
+  e.preventDefault();
+  e.stopPropagation();
+  if ((e.key === 'Backspace' || e.key === 'Delete') && !e.ctrlKey && !e.altKey) e.target.value = '';
+  else {
+    const accel = accelFromEvent(e);
+    if (accel) e.target.value = accel;
+  }
+}, true);
 document.addEventListener('change', async (e) => {
   if (e.target.id === 'preset-more' && e.target.value) {
     $('#m-services').insertAdjacentHTML('beforeend', svcEditHtml({ ...PRESETS[e.target.value], cwd: '', env: '' }));
     e.target.value = '';
+    refreshDeps();
   }
+  if (e.target.id === 'log-level') { levelFilter = e.target.value; renderLogBody(); }
+  if (e.target.id === 'port-mode' && $('#ports-body')) $('#ports-body').innerHTML = portRowsHtml();
   if (e.target.id === 'prof-select') {
     projects = await api.setProfile(selectedId, e.target.value);
     const p = sel();
@@ -874,6 +1248,14 @@ setInterval(() => {
 }, 1000);
 
 api.onLog(({ svcId, line }) => appendLog(svcId, line));
+// the quick launcher asked to show an app
+api.onSelect((id) => {
+  if (!projects.some((p) => p.id === id)) return;
+  selectedId = id;
+  logTab = 'all';
+  renderSidebar();
+  renderMain();
+});
 let taskKey = '';
 api.onStatus((s) => {
   status = s;
@@ -892,6 +1274,8 @@ api.onStatus((s) => {
 
 (async function init() {
   projects = await api.getProjects();
+  workspaces = await api.getWorkspaces();
+  try { runtimeCatalog = await api.runtimeList(); } catch {}
   status = await api.getStatus();
   await loadAllLogs();
   selectedId = projects[0]?.id || null;

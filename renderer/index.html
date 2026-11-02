@@ -21,11 +21,15 @@
       <svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
       <input id="proj-search" type="text" placeholder="Search apps…">
     </div>
+    <div id="ws-wrap"></div>
     <div id="project-list"></div>
     <div id="idle-banner"></div>
     <div class="tools">
       <button class="btn small ghost" data-action="free-mem" title="Stop idle servers to free memory"><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>Free memory</button>
       <button class="btn small red" data-action="stop-all" title="Stop every running server"><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>Stop all</button>
+      <button class="btn small ghost" data-action="ports" title="See every port in use on this PC and what owns it"><svg class="ic" viewBox="0 0 24 24"><path d="M9 2v6M15 2v6"/><path d="M6 8h12v4a6 6 0 0 1-12 0Z"/><path d="M12 18v4"/></svg>Ports</button>
+      <button class="btn small ghost" data-action="domains-open" title="Open your apps at https://name.test"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Domains</button>
+      <button class="btn small ghost" data-action="settings" title="Shortcut, start with Windows, editor"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</button>
       <button class="btn small ghost" data-action="export-cfg" title="Back up your apps"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/></svg>Export</button>
       <button class="btn small ghost" data-action="import-cfg" title="Import apps"><svg class="ic" viewBox="0 0 24 24"><path d="M12 21V9"/><path d="m7 13 5-5 5 5"/><path d="M4 3h16"/></svg>Import</button>
     </div>
@@ -36,5 +40,6 @@
 </div>
 <div id="modal-root"></div>
 <script src="app.js"></script>
+<script src="tools.js"></script>
 </body>
 </html>

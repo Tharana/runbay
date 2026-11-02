@@ -3,6 +3,24 @@
 All notable changes to RunBay. Newest first.
 Format: `## [version] - date`, then one bullet per change (the in-app About window reads this file).
 
+## [1.6.0] - 2026-11-03
+- **Workspaces**: save a set of apps as a stack (for example "Client X") and run or stop all of it with one click, from the sidebar or the tray
+- **Quick launcher**: press Ctrl+Alt+R anywhere in Windows, type an app or workspace name and press Enter to run or stop it (shortcut is changeable in Settings)
+- **Settings**: start RunBay with Windows, start minimized in the tray, pick your code editor, and turn log history on or off
+- **Port map**: see every port in use on the PC, which process owns it, which of your apps it blocks, and kill it (also works for programs RunBay did not start)
+- **Logs**: filter by level (errors, warnings, info), stack traces are highlighted and no longer inflate the error count, file paths are clickable and open in your editor at the right line, and the log history is kept between restarts
+- **Local domains with HTTPS**: give a service a name like `myshop.test` and open it at `https://myshop.test`. RunBay makes its own private certificate, runs a small proxy (hot reload works) and asks Windows for permission before it trusts the certificate or edits the hosts file
+- **.env editor**: edit `.env` files with secrets masked, compare two files, and get a warning (on the card and in the log) when keys from `.env.example` are missing
+- **Resource alerts**: a notification when a service stays above a CPU or memory limit, or goes quiet for too long (set in Settings)
+- **Database tools** for Docker databases: connection string, backup and restore, and a read-only table browser for PostgreSQL, MySQL and Redis
+- **History**: a timeline per app of crashes, automatic restarts and health failures, with uptime, typical outage length and a "Flaky" badge
+- **Start order**: choose what each service waits for, with a live diagram; services that wait for nothing start side by side
+- **Language versions per app**: RunBay reads `.nvmrc`, `.node-version`, `package.json` (engines / volta), `.python-version`, `pyproject.toml` and `composer.json`, finds a matching version among your installs (nvm-windows, fnm, Volta, pyenv-win, python.org, Laragon, XAMPP, Scoop) and runs only that app with it. Nothing global is switched, and a missing version comes with the command to install it
+- **`runbay` command line**: `runbay start myshop --wait`, `stop`, `restart`, `status`, `logs -f`, `list`. It starts RunBay if needed, waits until every service is ready, and returns exit codes made for scripts and CI. Install it from Settings
+- **Explain this error**: click an error in the Errors tab to ask Claude what it means and how to fix it. You see the exact text first, secrets are removed, and nothing is sent until you press the button. Needs your own Anthropic API key (stored encrypted)
+- Fixed: stopping an app while it was still starting no longer lets the remaining services come up
+- Quick buttons on every service: open in browser, copy URL, File Explorer, editor, and Windows Terminal (falls back to Command Prompt)
+
 ## [1.5.0] - 2026-10-30
 - Renamed from AppRun to **RunBay**; your saved apps are carried over automatically
 - First public, open-source release on GitHub (MIT)

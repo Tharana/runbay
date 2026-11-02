@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>RunBay launcher</title>
+<style>
+  :root { --text: #eceef5; --muted: #7a8097; --accent: #8b96ff; --green: #3ddc97; --red: #ff6b7e; --amber: #ffc45e; --border: rgba(255,255,255,.1); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; color: var(--text); background: #12141b;
+    font: 14px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { display: flex; flex-direction: column; border: 1px solid rgba(255,255,255,.16); }
+  #q { width: 100%; padding: 18px 20px; font: inherit; font-size: 17px; color: var(--text); background: transparent;
+    border: 0; border-bottom: 1px solid var(--border); outline: none; }
+  #q::placeholder { color: #565c72; }
+  #list { flex: 1; overflow-y: auto; padding: 6px; }
+  .it { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
+  .it.on { background: rgba(139,150,255,.14); border-color: rgba(139,150,255,.3); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #4a5068; flex: none; }
+  .dot.running { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .txt { flex: 1; min-width: 0; }
+  .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ws { font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--accent);
+    border: 1px solid rgba(139,150,255,.35); border-radius: 999px; padding: 1px 7px; margin-left: 8px; vertical-align: 2px; }
+  .act { font-size: 12px; font-weight: 600; opacity: 0; }
+  .it.on .act { opacity: 1; }
+  .act.run { color: var(--green); }
+  .act.stop { color: var(--red); }
+  .none { color: var(--muted); padding: 22px; text-align: center; }
+  #hint { color: var(--muted); font-size: 11.5px; padding: 8px 16px; border-top: 1px solid var(--border); display: flex; gap: 16px; }
+  kbd { font: inherit; background: rgba(255,255,255,.08); border-radius: 4px; padding: 0 5px; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 8px; }
+</style>
+</head>
+<body>
+<input id="q" type="text" placeholder="Type an app or workspace name…" autocomplete="off" spellcheck="false">
+<div id="list"></div>
+<div id="hint"><span><kbd>↑</kbd> <kbd>↓</kbd> choose</span><span><kbd>Enter</kbd> run / stop</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> open in RunBay</span><span><kbd>Esc</kbd> close</span></div>
+<script src="launcher.js"></script>
+</body>
+</html>

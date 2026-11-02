@@ -48,6 +48,20 @@ RunBay replaces all of that with one app:
 | **Git and packages** | Branch and status per app, Pull button, Install / Build buttons, warning when `package.json` changed |
 | **Env profiles** | Switch between dev and staging variables per app |
 | **Stay organised** | Favourites, groups, search, import / export of your app list |
+| **Workspaces** | Save a set of apps as a stack and start or stop all of it with one click |
+| **Quick launcher** | Global hotkey (Ctrl+Alt+R) to search and run any app from anywhere |
+| **Port map** | Every port in use on the PC, who owns it, which of your apps it blocks, and a kill button |
+| **Start with Windows** | Launch at login, optionally minimized to the tray, with your auto-start apps running |
+| **Open in** | Browser, File Explorer, your editor (VS Code, Cursor...) and Windows Terminal, plus a copy URL button |
+| **Local domains** | Open apps at `https://myshop.test` with an auto-generated trusted certificate |
+| **.env editor** | Edit and compare `.env` files with secrets masked, and warnings for keys missing from `.env.example` |
+| **Alerts and history** | Notifications for high CPU / memory or silent services, plus a crash and downtime timeline per app |
+| **Database tools** | Connection string, backup / restore and a table browser for Docker PostgreSQL, MySQL and Redis |
+| **Start order** | Say which service waits for which, drawn as a diagram |
+| **Language versions** | Each app runs with the Node / Python / PHP version its `.nvmrc`, `.python-version` or `composer.json` asks for, without switching anything globally |
+| **Command line** | `runbay start myshop --wait` from a terminal, script or CI; exit codes you can rely on |
+| **Explain this error** | Click an error in the Errors tab and Claude explains the likely cause and fix (you review the redacted text first; bring your own API key) |
+| **Smarter logs** | Level filter, highlighted stack traces, clickable file paths that open at the right line, history kept across restarts |
 | **Stays out of the way** | System tray, desktop notifications on crashes, free-memory finder for idle servers |
 
 <p align="center">
@@ -74,6 +88,20 @@ Prefer no installer? Download `RunBay-x.y.z-portable.exe` and run it from anywhe
 
 That is all. Add more apps the same way, star your favourites, and keep them in groups.
 
+## Command line
+
+Install it once from **Settings > Command line**, then open a new terminal:
+
+```
+runbay list                          # your apps and workspaces
+runbay start myshop --wait          # start, then wait until every service is ready
+runbay status myshop                # ports, health, CPU and memory
+runbay logs myshop -s api -n 50 -f  # follow one service
+runbay stop --all
+```
+
+Names can be shortened (`gem` finds "Gemstone ERP"); use `ws:` or `app:` to choose a workspace or an app. Exit codes: 0 ok, 1 failed or timed out, 2 bad usage or unknown name, 3 RunBay not running. In CI: `runbay start myshop --wait --timeout 180 && npm test`.
+
 ## FAQ
 
 **Where is my data stored?**
@@ -83,8 +111,14 @@ In `%APPDATA%\runbay`. Updating or uninstalling keeps it.
 Only the tools your own projects use. RunBay installs and updates ngrok for you.
 
 **Does it send my data anywhere?**
-No. RunBay runs fully on your PC. The only network call it can make is the optional
-"Check for updates" button, which downloads a small version file from this repository.
+No, not on its own. RunBay runs fully on your PC. Two things can reach the internet, and only when you
+ask: the "Check for updates" button (downloads a small version file from this repository) and
+**Explain this error** (sends the error text to Anthropic, after you review it with secrets removed,
+using your own API key). The `runbay` command talks only to the app on your own PC.
+
+**Does the command line work with the portable version?**
+Use the installer version: it can add `runbay` to your PATH from Settings. The portable exe
+cannot install the command.
 
 **Which systems are supported?**
 Windows 10 and 11 today. Contributions for macOS and Linux are welcome.
